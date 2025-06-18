@@ -13,6 +13,12 @@ import os
 from datetime import date,datetime
 
 from modules.invoice_status import einvoice_status
+from modules.header_subtotal import header_subtotal
+def to_2_decimal(value):
+    try:
+        return float(round(float(value), 2))
+    except (TypeError, ValueError):
+        return 0.0 
 load_dotenv()
 count = 0
 def invoice_header(data):
@@ -51,7 +57,11 @@ def invoice_header(data):
   normalized_brn = "NA" if str(brn_reg_num).strip().lower() in ["n/a", "na",None] else brn_reg_num
   state = get_state_codes(data.get("billTo.address.state","State_Province")) if data.get("billTo.address.state","State_Province") else get_state_codes("not applicable")
   
-
+  items = data.get('items', [])
+  total_line_extension_amount = sum(
+        abs(float(item.get("invoiceItems", {}).get('unitPrice', 0))) * abs(float(item.get("invoiceItems", {}).get("serviceQuantity", 0)))
+        for item in items
+    )
   cleartax_payload = {
   "InvoiceTypeCode": {
     "Value": doc_typ_code
@@ -200,109 +210,98 @@ def invoice_header(data):
         "CurrencyID": data.get("homeCurrency") if not None else "MYR",
         "Value": data.get("taxAmount")
       },
-      "TaxSubtotal": [
-        {
-          "TaxAmount": {
-            "CurrencyID": data.get("homeCurrency") if not None else "MYR",
-            "Value": (data.get("taxAmount"))
-
-          },
-          "TaxableAmount": {
-            "CurrencyID": data.get("homeCurrency") if not None else "MYR",
-            "Value": data.get("preTaxAmount")  # Adding taxable amount at header level
-          },
-          "TaxCategory": {
-            "Id": "02",
-            "TaxExemptionReason": ""
-          }
-        }
-      ]
+      "TaxSubtotal": []
     }
   ],
+
   "LegalMonetaryTotal": {
     "TaxExclusiveAmount": {
         "CurrencyID": data.get("homeCurrency") if not None else "MYR",
-      "Value": data.get("preTaxAmount")
+        "Value": to_2_decimal(data.get("preTaxAmount"))
+    },
+    "LineExtensionAmount": {
+                "CurrencyID": data.get("homeCurrency") if not None else "MYR",
+                "Value": to_2_decimal(total_line_extension_amount)
     },
     "TaxInclusiveAmount": {
         "CurrencyID": data.get("homeCurrency") if not None else "MYR",
-      "Value": (data.get("totalAmount"))
-      
+        "Value": to_2_decimal(data.get("totalAmount"))
     },
     "PayableAmount": {
         "CurrencyID": data.get("homeCurrency") if not None else "MYR",
-      "Value": (data.get("totalAmount"))
-
+        "Value": to_2_decimal(data.get("totalAmount"))
     },
+
   },
-  "PaymentMeans": {
-    "PaymentMeansCode": "04",
-    "PayeeFinancialAccount": {
-      "Id": "1234567890123"
-    }
-  },
-  "PaymentTerms": {
-    "Note": "Payment Method is CARD"
-  },
-  "TaxExchangeRate": {
-    "CalculationRate": homeExchangeRate
-  },
+  # "PaymentMeans": {
+  #   "PaymentMeansCode": "04",
+  #   "PayeeFinancialAccount": {
+  #     "Id": ""
+  #   }
+  # },
+  # "PaymentTerms": {
+  #   "Note": ""
+  # },
+  # "TaxExchangeRate": {
+  #   "CalculationRate": homeExchangeRate
+  # },
 }
   #changes start here
 
   # Add this function to aggregate tax details
-  def aggregate_tax_subtotals(items):
-        tax_categories = {}
+  # def aggregate_tax_subtotals(items):
+  #       tax_categories = {}
         
-        if items:
-            for item in items:
-                tax_info = item.get("invoiceItems", {}).get("tax", {})
-                tax_category = "02" if tax_info.get("name") else "E"
-                tax_percent = 0 if tax_info.get("percent") is None else tax_info.get("percent")/100
+  #       if items:
+  #           for item in items:
+  #               tax_info = item.get("invoiceItems", {}).get("tax", {})
+  #               tax_category = "02" if tax_info.get("name") else "E"
+  #               tax_percent = 0 if tax_info.get("percent") is None else tax_info.get("percent")/100
                 
-                key = (tax_category, tax_percent)
-                if key not in tax_categories:
-                    tax_categories[key] = {
-                        "taxAmount": 0,
-                        "taxableAmount": 0,
-                        "category": tax_category,
-                        "percent": tax_percent,
-                        "exemptionReason": "" if tax_info.get("name") else "Exempted Service"
-                    }
+  #               key = (tax_category, tax_percent)
+  #               if key not in tax_categories:
+  #                   tax_categories[key] = {
+  #                       "taxAmount": 0,
+  #                       "taxableAmount": 0,
+  #                       "category": tax_category,
+  #                        "percent": tax_percent,
+  #                       # "exemptionReason": "" if tax_info.get("name") else "Exempted Service"
+  #                   }
                 
-                tax_categories[key]["taxAmount"] += abs(tax_info.get("amount", 0))
-                tax_categories[key]["taxableAmount"] += abs(float(item.get("invoiceItems", {}).get("preTaxAmount", 0)))
+  #               tax_categories[key]["taxAmount"] += abs(tax_info.get("amount", 0))
+  #               tax_categories[key]["taxableAmount"] += abs(float(item.get("invoiceItems", {}).get("preTaxAmount", 0)))
         
-        return [
-            {
-                "TaxAmount": {
-                    "CurrencyID": data.get("homeCurrency") if not None else "MYR",
-                    "Value": details["taxAmount"]
-                },
-                "TaxableAmount": {
-                    "CurrencyID": data.get("homeCurrency") if not None else "MYR",
-                    "Value": details["taxableAmount"]
-                },
-                "TaxCategory": {
-                    "Id": details["category"],
-                    "TaxExemptionReason": details["exemptionReason"]
-                },
-                "Percent": details["percent"]
-            }
-            for details in tax_categories.values()
-        ]
+  #       return [
+  #           {
+  #               "TaxAmount": {
+  #                   "CurrencyID": data.get("homeCurrency") if not None else "MYR",
+  #                   "Value": details["taxAmount"]
+  #               },
+  #               "TaxableAmount": {
+  #                   "CurrencyID": data.get("homeCurrency") if not None else "MYR",
+  #                   "Value": details["taxableAmount"]
+  #               },
+  #               "TaxCategory": {
+  #                   "Id": details["category"],
+  #                   ##"TaxExemptionReason": details["exemptionReason"]
+  #               },
+  #               # "Percent": details["percent"]
+  #           }
+  #           for details in tax_categories.values()
+  #       ]
 
-    # Modify the TaxTotal section in cleartax_payload
+  #   # Modify the TaxTotal section in cleartax_payload
   items = data.get('items', [])
-  tax_subtotals = aggregate_tax_subtotals(items)
-    
+  tax_subtotals = header_subtotal(items, data)
+  
+  
   cleartax_payload["TaxTotal"] = [
         {
             "TaxAmount": {
                 "CurrencyID": data.get("homeCurrency") if not None else "MYR",
-                "Value": data.get("taxAmount")
+                "Value": sum(sub["TaxAmount"]["Value"] for sub in tax_subtotals)
             },
-            "TaxSubtotal": tax_subtotals
+            "TaxSubtotal": header_subtotal(items,data)
         }
     ]
 
@@ -318,7 +317,7 @@ def process():
     logger.info(type(now.month))
     for data in datas:
         invoice_date = datetime.strptime(data.get('invoiceDate'), "%Y-%m-%d %H:%M:%S")
-        if (invoice_date.year == now.year and (invoice_date.month == now.month or invoice_date.month == now.month-1)) and data.get("invoiceNumber")=="518-013739": #Checking for this month and previous month
+        if (invoice_date.year == now.year and (invoice_date.month == now.month or invoice_date.month == now.month-1)) and data.get("invoiceNumber"):#=="516-014950": #Checking for this month and previous month
           # logger.info(data)
           # break
           if data.get("LHDN_Status") != 'VALID' or data.get("LHDN_QrCode") is None:
@@ -354,6 +353,8 @@ def process():
 def process_line_item(item,data):
   discount_amount=abs(float(item.get("invoiceItems").get('unitPrice')))*abs(float(item.get("invoiceItems").get("serviceQuantity")))*item.get('invoiceItems').get('discount').get('percent')/100 
   line_extension_amount=abs(float(item.get("invoiceItems").get('unitPrice')))*abs(float(item.get("invoiceItems").get("serviceQuantity")))
+  
+  # total_line_amount += line_extension_amount - discount_amount
   return {
       "Id": item.get("sInvItemId"),
       "InvoicedQuantity": {
@@ -403,12 +404,13 @@ def process_line_item(item,data):
       },
       "LineExtensionAmount": {
         "CurrencyID": data.get("homeCurrency") if not None else "MYR",
-        "Value": line_extension_amount
+        "Value": to_2_decimal(line_extension_amount)
       },
       "TaxTotal": {
         "TaxAmount": {
         "CurrencyID": data.get("homeCurrency"),
         "Value": abs(item.get('invoiceItems').get('tax').get('amount')),
+        },
         "TaxSubtotal": [
           {
             "TaxAmount": {
@@ -422,7 +424,7 @@ def process_line_item(item,data):
             "TaxCategory": {
   
               "Id": "02" if item.get("invoiceItems").get("tax").get("name") != None else "E",
-              "TaxExemptionReason": "" if item.get("invoiceItems").get('tax').get("name") !=None else "Exempted Service"
+              ##"TaxExemptionReason": "" if item.get("invoiceItems").get('tax').get("name") !=None else "Exempted Service"
             },
             "Percent": 0 if item.get("invoiceItems").get("tax").get("percent") == None else item.get("invoiceItems").get("tax").get("percent")/100
 
@@ -430,5 +432,5 @@ def process_line_item(item,data):
         ]
         
       }
-    }
   }
+  
