@@ -7,7 +7,7 @@ from modules.utils import get_state_codes
 # from exceptions import InvoiceExceptions
 from modules.base64 import json2base64
 from modules.final_payload import cleartax
-from modules.POST_cleartax import post_2_cleartax
+# from modules.POST_cleartax import post_2_cleartax
 from dotenv import load_dotenv 
 import os
 from datetime import date,datetime
@@ -317,7 +317,7 @@ def process():
     logger.info(type(now.month))
     for data in datas:
         invoice_date = datetime.strptime(data.get('invoiceDate'), "%Y-%m-%d %H:%M:%S")
-        if (invoice_date.year == now.year and (invoice_date.month == now.month or invoice_date.month == now.month-1)) and data.get("invoiceNumber"):#=="516-014950": #Checking for this month and previous month
+        if (invoice_date.year == now.year and (invoice_date.month == now.month or invoice_date.month == now.month-1)) and data.get("invoiceNumber")=="516-014950": #Checking for this month and previous month
           # logger.info(data)
           # break
           if data.get("LHDN_Status") != 'VALID' or data.get("LHDN_QrCode") is None:
@@ -352,8 +352,8 @@ def process():
               continue
 def process_line_item(item,data):
   discount_amount=abs(float(item.get("invoiceItems").get('unitPrice')))*abs(float(item.get("invoiceItems").get("serviceQuantity")))*item.get('invoiceItems').get('discount').get('percent')/100 
-  line_extension_amount=abs(float(item.get("invoiceItems").get('unitPrice')))*abs(float(item.get("invoiceItems").get("serviceQuantity")))
-  
+  item_price_extension = abs(float(item.get("invoiceItems").get('unitPrice')))*abs(float(item.get("invoiceItems").get("serviceQuantity")))
+  line_extension_amount= item_price_extension + discount_amount
   # total_line_amount += line_extension_amount - discount_amount
   return {
       "Id": item.get("sInvItemId"),
@@ -384,6 +384,10 @@ def process_line_item(item,data):
             "CountryCode": "MYS"
           }
         }
+      },
+      "ItemPriceExtension": {
+        "CurrencyID": data.get("homeCurrency") if not None else "MYR",
+        "Value": to_2_decimal(item_price_extension)
       },
       "AllowanceCharge": [
         {
