@@ -17,8 +17,8 @@ def fetch_invoices():
             "Connection": "keep-alive",
         }
         payload = {
-            "items":"true",
-            "customer":"true",
+            "items": "true",
+            "customer": "true",
         }
         logger.info("Accessing API....")
         response = requests.post(API_URL,headers=header,data=payload,stream=True,timeout=300)

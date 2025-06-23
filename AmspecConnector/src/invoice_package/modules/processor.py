@@ -309,7 +309,7 @@ def invoice_header(data):
   logger.info(f"cleartax_payload_XXXXXXXXXXXX: {cleartax_payload}")
   return cleartax_payload
 
-   
+    
 def process():
     invoices = fetch_invoices()
     datas = invoices.get("data")
@@ -317,7 +317,7 @@ def process():
     logger.info(type(now.month))
     for data in datas:
         invoice_date = datetime.strptime(data.get('invoiceDate'), "%Y-%m-%d %H:%M:%S")
-        if (invoice_date.year == now.year and (invoice_date.month == now.month or invoice_date.month == now.month-1)) and data.get("invoiceNumber")=="516-014950": #Checking for this month and previous month
+        if (invoice_date.year == now.year and (invoice_date.month == now.month or invoice_date.month == now.month-1)) and data.get("invoiceNumber"):#=="516-014950": #Checking for this month and previous month
           # logger.info(data)
           # break
           if data.get("LHDN_Status") != 'VALID' or data.get("LHDN_QrCode") is None:
