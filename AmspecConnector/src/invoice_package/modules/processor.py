@@ -21,7 +21,7 @@ def to_2_decimal(value):
         return 0.0 
 load_dotenv()
 # payload_count = 0
-Send_To_Cleartax = True
+Send_To_Cleartax = True # set it false to check the payloads without sending to cleartax.
 
 def invoice_header(data):
   if data.get("homeExchangeRate") is None:
