@@ -7,7 +7,7 @@ from modules.utils import get_state_codes
 # from exceptions import InvoiceExceptions
 from modules.base64 import json2base64
 from modules.final_payload import cleartax
-# from modules.POST_cleartax import post_2_cleartax
+from modules.POST_cleartax import post_2_cleartax
 from dotenv import load_dotenv 
 import os
 from datetime import date,datetime
@@ -20,7 +20,9 @@ def to_2_decimal(value):
     except (TypeError, ValueError):
         return 0.0 
 load_dotenv()
-count = 0
+# payload_count = 0
+Send_To_Cleartax = True
+
 def invoice_header(data):
   if data.get("homeExchangeRate") is None:
     homeExchangeRate = 1
@@ -68,7 +70,7 @@ def invoice_header(data):
   },
   "IssueDate": str(date.today()),
   "IssueTime": "00:00:00",
-  "DocumentCurrencyCode": data.get("homeCurrency") if not None else "MYR",
+  "DocumentCurrencyCode": data.get("invoiceCurrency") if not None else "MYR",
   "Id": data.get("invoiceNumber"),
   "AccountingCustomerParty": {
     "Party": {
@@ -187,18 +189,18 @@ def invoice_header(data):
     {
       "ChargeIndicator": "false",
       "MultiplierFactorNumeric": 0,
-      "AllowanceChargeReason": "In store discount",
+      "AllowanceChargeReason": "",
       "Amount": {
-        "CurrencyID": data.get("homeCurrency") if not None else "MYR",
+        "CurrencyID": data.get("invoiceCurrency") if not None else "MYR",
         "Value": 0
       }
     },
     {
       "ChargeIndicator": "true",
       "MultiplierFactorNumeric": 0,
-      "AllowanceChargeReason": "Convenience fee",
+      "AllowanceChargeReason": "",
       "Amount": {
-        "CurrencyID": data.get("homeCurrency") if not None else "MYR",
+        "CurrencyID": data.get("invoiceCurrency") if not None else "MYR",
         "Value": 0
       }
     }
@@ -207,7 +209,7 @@ def invoice_header(data):
     {
       "TaxAmount": {
 
-        "CurrencyID": data.get("homeCurrency") if not None else "MYR",
+        "CurrencyID": data.get("invoiceCurrency") if not None else "MYR",
         "Value": data.get("taxAmount")
       },
       "TaxSubtotal": []
@@ -216,19 +218,19 @@ def invoice_header(data):
 
   "LegalMonetaryTotal": {
     "TaxExclusiveAmount": {
-        "CurrencyID": data.get("homeCurrency") if not None else "MYR",
+        "CurrencyID": data.get("invoiceCurrency") if not None else "MYR",
         "Value": to_2_decimal(data.get("preTaxAmount"))
     },
     "LineExtensionAmount": {
-                "CurrencyID": data.get("homeCurrency") if not None else "MYR",
+                "CurrencyID": data.get("invoiceCurrency") if not None else "MYR",
                 "Value": to_2_decimal(total_line_extension_amount)
     },
     "TaxInclusiveAmount": {
-        "CurrencyID": data.get("homeCurrency") if not None else "MYR",
+        "CurrencyID": data.get("invoiceCurrency") if not None else "MYR",
         "Value": to_2_decimal(data.get("totalAmount"))
     },
     "PayableAmount": {
-        "CurrencyID": data.get("homeCurrency") if not None else "MYR",
+        "CurrencyID": data.get("invoiceCurrency") if not None else "MYR",
         "Value": to_2_decimal(data.get("totalAmount"))
     },
 
@@ -274,11 +276,11 @@ def invoice_header(data):
   #       return [
   #           {
   #               "TaxAmount": {
-  #                   "CurrencyID": data.get("homeCurrency") if not None else "MYR",
+  #                   "CurrencyID": data.get("invoiceCurrency") if not None else "MYR",
   #                   "Value": details["taxAmount"]
   #               },
   #               "TaxableAmount": {
-  #                   "CurrencyID": data.get("homeCurrency") if not None else "MYR",
+  #                   "CurrencyID": data.get("invoiceCurrency") if not None else "MYR",
   #                   "Value": details["taxableAmount"]
   #               },
   #               "TaxCategory": {
@@ -298,7 +300,7 @@ def invoice_header(data):
   cleartax_payload["TaxTotal"] = [
         {
             "TaxAmount": {
-                "CurrencyID": data.get("homeCurrency") if not None else "MYR",
+                "CurrencyID": data.get("invoiceCurrency") if not None else "MYR",
                 "Value": sum(sub["TaxAmount"]["Value"] for sub in tax_subtotals)
             },
             "TaxSubtotal": header_subtotal(items,data)
@@ -306,7 +308,8 @@ def invoice_header(data):
     ]
 
  #changes end here 
-  logger.info(f"cleartax_payload_XXXXXXXXXXXX: {cleartax_payload}")
+ #commented out
+  # logger.info(f"cleartax_payload_XXXXXXXXXXXX: {cleartax_payload}") 
   return cleartax_payload
 
     
@@ -315,9 +318,24 @@ def process():
     datas = invoices.get("data")
     now = datetime.now()
     logger.info(type(now.month))
+    payload_count = 0
+    logger.info(f"Total invoices: {len(datas)}")
     for data in datas:
+        #Debugging logic starts
+        # logger.info(f"Processing invoice: {data.get('invoiceNumber')}")
+        # invoice_date = datetime.strptime(data.get('invoiceDate'), "%Y-%m-%d %H:%M:%S")
+        # if not (invoice_date.year == now.year and (invoice_date.month == now.month or invoice_date.month == now.month-1)):
+        #     logger.info("Skipped due to date filter")
+        #     continue
+        # if not data.get("invoiceNumber"):
+        #     logger.info("Skipped due to missing invoice number")
+        #     continue
+        # if data.get("LHDN_Status") == 'VALID' and data.get("LHDN_QrCode") is not None:
+        #     logger.info("Skipped due to LHDN status/QR code")
+        #     continue
+        # #Debugging logic ends
         invoice_date = datetime.strptime(data.get('invoiceDate'), "%Y-%m-%d %H:%M:%S")
-        if (invoice_date.year == now.year and (invoice_date.month == now.month or invoice_date.month == now.month-1)) and data.get("invoiceNumber"):#=="516-014950": #Checking for this month and previous month
+        if (invoice_date.year == now.year and (invoice_date.month == now.month or invoice_date.month == now.month-1)) and data.get("invoiceNumber"):#=="516-015048": #Checking for this month and previous month
           # logger.info(data)
           # break
           if data.get("LHDN_Status") != 'VALID' or data.get("LHDN_QrCode") is None:
@@ -327,14 +345,28 @@ def process():
             if items is not None:
                 for item in items:
                     invoice_headers["InvoiceLine"].append(process_line_item(item,data))
-            logger.info(invoice_headers)
+            # commented out
+            # logger.info(invoice_headers)
             # break
             base64 = json2base64(invoice_headers)
-            logger.info(base64)
+            #commented out
+            # logger.info(base64)
             cleartax_final_payload = cleartax(base64)
-            logger.info(cleartax_final_payload)
-            document_id_response = post_2_cleartax(cleartax_final_payload)
-            logger.info(document_id_response)
+            #commented out
+            # logger.info(cleartax_final_payload)
+            payload_count += 1
+            logger.info(f"Payloads sent so far: {payload_count, data.get('invoiceNumber')}")
+            if Send_To_Cleartax and payload_count:
+                try:
+                    document_id_response = post_2_cleartax(cleartax_final_payload)
+                    logger.info(document_id_response)
+                except Exception as e:
+                    logger.error(f"Error sending payload to ClearTax: {e}")
+                    continue
+            else:
+                logger.info("Skipping sending to ClearTax as Send_To_Cleartax is False or payload_count is 0")
+                document_id_response = None
+            # logger.info(document_id_response)
             if document_id_response != None and  document_id_response.get("DocumentResponses") != None and len(document_id_response.get("DocumentResponses"))>0:
               if document_id_response.get("ErrorDetails") !=None:
                 error_dtls = str(document_id_response.get("ErrorDetails"))
@@ -358,7 +390,7 @@ def process_line_item(item,data):
   return {
       "Id": item.get("sInvItemId"),
       "InvoicedQuantity": {
-        "Quantity": abs(int(item.get("invoiceItems").get("serviceQuantity"))),
+        "Quantity": abs(float(item.get("invoiceItems").get("serviceQuantity"))),
 
         "UnitCode": "H87"
       },
@@ -386,7 +418,7 @@ def process_line_item(item,data):
         }
       },
       "ItemPriceExtension": {
-        "CurrencyID": data.get("homeCurrency") if not None else "MYR",
+        "CurrencyID": data.get("invoiceCurrency") if not None else "MYR",
         "Value": to_2_decimal(item_price_extension)
       },
       "AllowanceCharge": [
@@ -395,34 +427,34 @@ def process_line_item(item,data):
           "MultiplierFactorNumeric": item.get('invoiceItems').get('discount').get('percent')/100,
           "AllowanceChargeReason": "NA",
           "Amount": {
-            "CurrencyID": data.get("homeCurrency"),
+            "CurrencyID": data.get("invoiceCurrency"),
             "Value": abs(float(item.get("invoiceItems").get('unitPrice')))*abs(float(item.get("invoiceItems").get("serviceQuantity")))*item.get('invoiceItems').get('discount').get('percent')/100  #to be calculated
           }
         },
       ],
       "Price": {
         "PriceAmount": {
-          "CurrencyID": data.get("homeCurrency") if not None else "MYR",
+          "CurrencyID": data.get("invoiceCurrency") if not None else "MYR",
           "Value": abs(item.get("invoiceItems").get("unitPrice"))
         }
       },
       "LineExtensionAmount": {
-        "CurrencyID": data.get("homeCurrency") if not None else "MYR",
+        "CurrencyID": data.get("invoiceCurrency") if not None else "MYR",
         "Value": to_2_decimal(line_extension_amount)
       },
       "TaxTotal": {
         "TaxAmount": {
-        "CurrencyID": data.get("homeCurrency"),
+        "CurrencyID": data.get("invoiceCurrency"),
         "Value": abs(item.get('invoiceItems').get('tax').get('amount')),
         },
         "TaxSubtotal": [
           {
             "TaxAmount": {
-              "CurrencyID": data.get("homeCurrency") if not None else "MYR",
+              "CurrencyID": data.get("invoiceCurrency") if not None else "MYR",
               "Value": round(abs(item.get('invoiceItems').get('tax').get('amount')),2)
             },
             "TaxableAmount": {
-              "CurrencyID": data.get("homeCurrency") if not None else "MYR",
+              "CurrencyID": data.get("invoiceCurrency") if not None else "MYR",
               "Value": round(abs(float(item.get("invoiceItems").get("preTaxAmount"))),2)         
             },
             "TaxCategory": {

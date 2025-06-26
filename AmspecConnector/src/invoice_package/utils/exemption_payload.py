@@ -224,7 +224,7 @@ def dummy_exemption_payload():
     {
       "ChargeIndicator": "false",
       "MultiplierFactorNumeric": 0,
-      "AllowanceChargeReason": "In store discount",
+      "AllowanceChargeReason": "",
       "Amount": {
         "CurrencyID": "MYR",
         # "CurrencyID": data.get("InvoiceCurrency"),
@@ -235,7 +235,7 @@ def dummy_exemption_payload():
     {
       "ChargeIndicator": "true",
       "MultiplierFactorNumeric": 0,
-      "AllowanceChargeReason": "Convenience fee",
+      "AllowanceChargeReason": "",
       "Amount": {
         "CurrencyID": "MYR",
         # "CurrencyID": data.get("InvoiceCurrency"),

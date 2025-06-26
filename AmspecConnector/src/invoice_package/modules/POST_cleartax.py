@@ -15,7 +15,7 @@ PERIOD_IN_SECONDS = 60
 @limits(calls=CALLS_PER_MINUTE, period=PERIOD_IN_SECONDS)
 @retry(
     stop=stop_after_attempt(3),  # Retry 3 times
-    wait=wait_exponential(multiplier=1, min=4, max=10),  # Wait between 4-10 seconds
+    # wait=wait_exponential(multiplier=1, min=4, max=10),  # Wait between 4-10 seconds
     reraise=True
 )
 def post_2_cleartax(final_payload):

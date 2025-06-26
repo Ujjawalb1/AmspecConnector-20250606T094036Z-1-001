@@ -33,11 +33,11 @@ def header_subtotal(items, data):
         if values["TaxableAmount"] > 0:
             subtotals.append({
                 "TaxAmount": {
-                    "CurrencyID": data.get("homeCurrency") or "MYR",
+                    "CurrencyID": data.get("invoiceCurrency") or "MYR",
                     "Value": round(values["TaxAmount"], 2)
                 },
                 "TaxableAmount": {
-                    "CurrencyID": data.get("homeCurrency") or "MYR",
+                    "CurrencyID": data.get("invoiceCurrency") or "MYR",
                     "Value": round(values["TaxableAmount"], 2)
                 },
                 "TaxCategory": {
