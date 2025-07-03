@@ -2,7 +2,7 @@ from setuptools import setup,find_packages
 
 setup(
     name="amspec_einvoice_package",
-    version="0.1.0",
+    version="0.1.2",
     author="Moksh Baweja",
     author_email="mokshb@engineosol.com",
     description = "package for einvoices",
