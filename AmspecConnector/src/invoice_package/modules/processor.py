@@ -1,4 +1,5 @@
 import csv
+import openpyxl
 from modules.fetcher import fetch_invoices
 from modules.post_2_amspec import post_invoices
 from logger import logger
@@ -61,7 +62,8 @@ def invoice_header(data):
   
   items = data.get('items', [])
   total_line_extension_amount = sum(
-        abs(float(item.get("invoiceItems", {}).get('unitPrice', 0))) * abs(float(item.get("invoiceItems", {}).get("serviceQuantity", 0)))
+        # abs(float(item.get("invoiceItems", {}).get('unitPrice', 0))) * abs(float(item.get("invoiceItems", {}).get("serviceQuantity", 0)))
+        (abs(float(item.get("invoiceItems").get("preTaxAmount"))))
         for item in items
     )
   cleartax_payload = {
@@ -70,7 +72,7 @@ def invoice_header(data):
   },
   "IssueDate": str(date.today()),
   "IssueTime": "00:00:00",
-  "DocumentCurrencyCode": data.get("invoiceCurrency") if not None else "MYR",
+  "DocumentCurrencyCode": data.get("invoiceCurrency"),# if not None else "MYR",
   "Id": data.get("invoiceNumber"),
   "AccountingCustomerParty": {
     "Party": {
@@ -102,6 +104,7 @@ def invoice_header(data):
       ],
       "PartyLegalEntity": {
         "RegistrationName": data.get("billTo.partyName")
+        
       },
       "PostalAddress": {
         "AddressLine": [
@@ -191,7 +194,7 @@ def invoice_header(data):
       "MultiplierFactorNumeric": 0,
       "AllowanceChargeReason": "",
       "Amount": {
-        "CurrencyID": data.get("invoiceCurrency") if not None else "MYR",
+        "CurrencyID": data.get("invoiceCurrency"),# if not None else "MYR",
         "Value": 0
       }
     },
@@ -200,7 +203,7 @@ def invoice_header(data):
       "MultiplierFactorNumeric": 0,
       "AllowanceChargeReason": "",
       "Amount": {
-        "CurrencyID": data.get("invoiceCurrency") if not None else "MYR",
+        "CurrencyID": data.get("invoiceCurrency"),# if not None else "MYR",
         "Value": 0
       }
     }
@@ -209,7 +212,7 @@ def invoice_header(data):
     {
       "TaxAmount": {
 
-        "CurrencyID": data.get("invoiceCurrency") if not None else "MYR",
+        "CurrencyID": data.get("invoiceCurrency"),#if not None else "MYR",
         "Value": data.get("taxAmount")
       },
       "TaxSubtotal": []
@@ -222,15 +225,15 @@ def invoice_header(data):
         "Value": to_2_decimal(data.get("preTaxAmount"))
     },
     "LineExtensionAmount": {
-                "CurrencyID": data.get("invoiceCurrency") if not None else "MYR",
+                "CurrencyID": data.get("invoiceCurrency"),#if not None else "MYR",
                 "Value": to_2_decimal(total_line_extension_amount)
     },
     "TaxInclusiveAmount": {
-        "CurrencyID": data.get("invoiceCurrency") if not None else "MYR",
+        "CurrencyID": data.get("invoiceCurrency"),#if not None else "MYR",
         "Value": to_2_decimal(data.get("totalAmount"))
     },
     "PayableAmount": {
-        "CurrencyID": data.get("invoiceCurrency") if not None else "MYR",
+        "CurrencyID": data.get("invoiceCurrency"),#if not None else "MYR",
         "Value": to_2_decimal(data.get("totalAmount"))
     },
 
@@ -276,11 +279,11 @@ def invoice_header(data):
   #       return [
   #           {
   #               "TaxAmount": {
-  #                   "CurrencyID": data.get("invoiceCurrency") if not None else "MYR",
+  #                   "CurrencyID": data.get("invoiceCurrency") ,#if not None else "MYR",
   #                   "Value": details["taxAmount"]
   #               },
   #               "TaxableAmount": {
-  #                   "CurrencyID": data.get("invoiceCurrency") if not None else "MYR",
+  #                   "CurrencyID": data.get("invoiceCurrency") ,#if not None else "MYR",
   #                   "Value": details["taxableAmount"]
   #               },
   #               "TaxCategory": {
@@ -300,7 +303,7 @@ def invoice_header(data):
   cleartax_payload["TaxTotal"] = [
         {
             "TaxAmount": {
-                "CurrencyID": data.get("invoiceCurrency") if not None else "MYR",
+                "CurrencyID": data.get("invoiceCurrency"),#if not None else "MYR",
                 "Value": sum(sub["TaxAmount"]["Value"] for sub in tax_subtotals)
             },
             "TaxSubtotal": header_subtotal(items,data)
@@ -309,7 +312,7 @@ def invoice_header(data):
 
  #changes end here 
  #commented out
-  # logger.info(f"cleartax_payload_XXXXXXXXXXXX: {cleartax_payload}") 
+  logger.info(f"cleartax_payload_XXXXXXXXXXXX: {cleartax_payload}") 
   return cleartax_payload
 
     
@@ -317,9 +320,13 @@ def process():
     invoices = fetch_invoices()
     datas = invoices.get("data")
     now = datetime.now()
-    logger.info(type(now.month))
+    # logger.info(type(now.month))
     payload_count = 0
     logger.info(f"Total invoices: {len(datas)}")
+    # wb = openpyxl.Workbook()
+    # ws = wb.active
+    # ws.title = "Invoices"
+    # ws.append(["Invoice Number", "Registration Name", "Date"])
     for data in datas:
         #Debugging logic starts
         # logger.info(f"Processing invoice: {data.get('invoiceNumber')}")
@@ -335,8 +342,14 @@ def process():
         #     continue
         # #Debugging logic ends
         invoice_date = datetime.strptime(data.get('invoiceDate'), "%Y-%m-%d %H:%M:%S")
-        if (invoice_date.year == now.year and (invoice_date.month == now.month or invoice_date.month == now.month-1)) and data.get("invoiceNumber"):#=="516-015048": #Checking for this month and previous month
-          # logger.info(data)
+       # for particular date and invoice number starts
+        # registration_name = data.get("billTo.partyName")
+        # if invoice_date.day == 25 and invoice_date.month == 6 and data.get("invoiceNumber"):
+        #     # logger.info(f"Processing invoice: {data.get('invoiceNumber')}, Registration Name: {registration_name}, Date: {invoice_date}")
+        #     ws.append([data.get('invoiceNumber'), registration_name, invoice_date.strftime("%Y-%m-%d")])
+        if (invoice_date.year == now.year and (invoice_date.month == now.month or invoice_date.month == now.month-1)) and data.get("invoiceNumber"):#=="518-014079": #Checking for this month and previous month
+         ## ends
+          logger.info(data)
           # break
           if data.get("LHDN_Status") != 'VALID' or data.get("LHDN_QrCode") is None:
             invoice_headers = invoice_header(data)
@@ -346,16 +359,16 @@ def process():
                 for item in items:
                     invoice_headers["InvoiceLine"].append(process_line_item(item,data))
             # commented out
-            # logger.info(invoice_headers)
+            logger.info(invoice_headers)
             # break
             base64 = json2base64(invoice_headers)
             #commented out
-            # logger.info(base64)
+            logger.info(base64)
             cleartax_final_payload = cleartax(base64)
             #commented out
-            # logger.info(cleartax_final_payload)
+            logger.info(cleartax_final_payload)
             payload_count += 1
-            logger.info(f"Payloads sent so far: {payload_count, data.get('invoiceNumber')}")
+            # logger.info(f"Payloads sent so far: {payload_count, data.get('invoiceNumber')}")
             if Send_To_Cleartax and payload_count:
                 try:
                     document_id_response = post_2_cleartax(cleartax_final_payload)
@@ -364,9 +377,9 @@ def process():
                     logger.error(f"Error sending payload to ClearTax: {e}")
                     continue
             else:
-                logger.info("Skipping sending to ClearTax as Send_To_Cleartax is False or payload_count is 0")
+                # logger.info("Skipping sending to ClearTax as Send_To_Cleartax is False or payload_count is 0")
                 document_id_response = None
-            # logger.info(document_id_response)
+            logger.info(document_id_response)
             if document_id_response != None and  document_id_response.get("DocumentResponses") != None and len(document_id_response.get("DocumentResponses"))>0:
               if document_id_response.get("ErrorDetails") !=None:
                 error_dtls = str(document_id_response.get("ErrorDetails"))
@@ -382,10 +395,11 @@ def process():
             # break
           else:
               continue
+    # wb.save("invoices_25_june.xlsx")
 def process_line_item(item,data):
   discount_amount=abs(float(item.get("invoiceItems").get('unitPrice')))*abs(float(item.get("invoiceItems").get("serviceQuantity")))*item.get('invoiceItems').get('discount').get('percent')/100 
   item_price_extension = abs(float(item.get("invoiceItems").get('unitPrice')))*abs(float(item.get("invoiceItems").get("serviceQuantity")))
-  line_extension_amount= item_price_extension + discount_amount
+  line_extension_amount= item_price_extension - discount_amount
   # total_line_amount += line_extension_amount - discount_amount
   return {
       "Id": item.get("sInvItemId"),
@@ -418,7 +432,7 @@ def process_line_item(item,data):
         }
       },
       "ItemPriceExtension": {
-        "CurrencyID": data.get("invoiceCurrency") if not None else "MYR",
+        "CurrencyID": data.get("invoiceCurrency"),#if not None else "MYR",
         "Value": to_2_decimal(item_price_extension)
       },
       "AllowanceCharge": [
@@ -434,12 +448,12 @@ def process_line_item(item,data):
       ],
       "Price": {
         "PriceAmount": {
-          "CurrencyID": data.get("invoiceCurrency") if not None else "MYR",
+          "CurrencyID": data.get("invoiceCurrency"),#if not None else "MYR",
           "Value": abs(item.get("invoiceItems").get("unitPrice"))
         }
       },
       "LineExtensionAmount": {
-        "CurrencyID": data.get("invoiceCurrency") if not None else "MYR",
+        "CurrencyID": data.get("invoiceCurrency"),#if not None else "MYR",
         "Value": to_2_decimal(line_extension_amount)
       },
       "TaxTotal": {
@@ -455,12 +469,12 @@ def process_line_item(item,data):
             },
             "TaxableAmount": {
               "CurrencyID": data.get("invoiceCurrency") if not None else "MYR",
-              "Value": round(abs(float(item.get("invoiceItems").get("preTaxAmount"))),2)         
+              "Value": round(abs(float(item.get("invoiceItems").get("preTaxAmount"))),2)
             },
             "TaxCategory": {
   
               "Id": "02" if item.get("invoiceItems").get("tax").get("name") != None else "E",
-              ##"TaxExemptionReason": "" if item.get("invoiceItems").get('tax').get("name") !=None else "Exempted Service"
+              "TaxExemptionReason": "" if item.get("invoiceItems").get('tax').get("name") !=None else "Exempted Service"
             },
             "Percent": 0 if item.get("invoiceItems").get("tax").get("percent") == None else item.get("invoiceItems").get("tax").get("percent")/100
 
