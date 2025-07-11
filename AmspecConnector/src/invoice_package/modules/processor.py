@@ -1,3 +1,4 @@
+#current code in processor.py
 import csv
 import openpyxl
 from modules.fetcher import fetch_invoices
@@ -61,11 +62,13 @@ def invoice_header(data):
   state = get_state_codes(data.get("billTo.address.state","State_Province")) if data.get("billTo.address.state","State_Province") else get_state_codes("not applicable")
   
   items = data.get('items', [])
-  total_line_extension_amount = sum(
-        # abs(float(item.get("invoiceItems", {}).get('unitPrice', 0))) * abs(float(item.get("invoiceItems", {}).get("serviceQuantity", 0)))
-        (abs(float(item.get("invoiceItems").get("preTaxAmount"))))
-        for item in items
-    )
+  # total_line_extension_amount = calculate_total_item_price_extension(items)
+  total_line_extension_amount = sum(item.get("line_extension_amount", 0) for item in items)
+  logger.info(f"Total Line Extension Amount: {total_line_extension_amount}")
+  #       # abs(float(item.get("invoiceItems", {}).get('unitPrice', 0))) * abs(float(item.get("invoiceItems", {}).get("serviceQuantity", 0)))#/float(item.get("invoiceItems", {}).get("costShare", 1)))
+  #       # (abs(float(item.get("invoiceItems").get("preTaxAmount"))))
+  #       for item in items
+  #   )
   cleartax_payload = {
   "InvoiceTypeCode": {
     "Value": doc_typ_code
@@ -347,18 +350,26 @@ def process():
         # if invoice_date.day == 25 and invoice_date.month == 6 and data.get("invoiceNumber"):
         #     # logger.info(f"Processing invoice: {data.get('invoiceNumber')}, Registration Name: {registration_name}, Date: {invoice_date}")
         #     ws.append([data.get('invoiceNumber'), registration_name, invoice_date.strftime("%Y-%m-%d")])
-        if (invoice_date.year == now.year and (invoice_date.month == now.month or invoice_date.month == now.month-1)) and data.get("invoiceNumber"):#=="518-014079": #Checking for this month and previous month
+        if (invoice_date.year == now.year and (invoice_date.month == now.month or invoice_date.month == now.month-1)) and data.get("invoiceNumber")=="518-014064": #Checking for this month and previous month
          ## ends
           logger.info(data)
           # break
           if data.get("LHDN_Status") != 'VALID' or data.get("LHDN_QrCode") is None:
-            invoice_headers = invoice_header(data)
-            invoice_id = data.get("invoiceId")
+            # invoice_headers = invoice_header(data)
+            # invoice_id = data.get("invoiceId")
             items = data.get('items')
+            processed_items = []
             if items is not None:
                 for item in items:
-                    invoice_headers["InvoiceLine"].append(process_line_item(item,data))
-            # commented out
+                    processed_item = process_line_item(item, data)
+                    processed_items.append(processed_item)
+            data['items'] = items  
+            
+            
+            invoice_headers = invoice_header(data)  # Now invoice_header will see line_extension_amounts
+            invoice_id = data.get("invoiceId")
+            invoice_headers["InvoiceLine"] = processed_items# commented out
+            
             logger.info(invoice_headers)
             # break
             base64 = json2base64(invoice_headers)
@@ -396,10 +407,31 @@ def process():
           else:
               continue
     # wb.save("invoices_25_june.xlsx")
+
+# def calculate_total_item_price_extension(items):
+#     total_price_extension = 0
+#     for item in items:
+#         unit_price = abs(float(item.get("invoiceItems").get('unitPrice', 0)))
+#         quantity = abs(float(item.get("invoiceItems").get("serviceQuantity", 0)))
+#         cost_share = item.get('invoiceItems').get('costShare', 1)
+#         discount_amount = abs(float(item.get("invoiceItems").get('unitPrice')))*abs(float(item.get("invoiceItems").get("serviceQuantity")))*item.get('invoiceItems').get('discount').get('percent')/100
+#         # If cost_share is a dict with 'percent', extract it; otherwise, assume 100%
+#         if isinstance(cost_share, dict):
+#             cost_share_percent = cost_share.get('percent', 100) / 100
+#         else:
+#             cost_share_percent = 1
+#         line_extension_amount = unit_price * quantity * cost_share_percent - discount_amount
+#         total_price_extension += line_extension_amount
+#     return total_price_extension
+
 def process_line_item(item,data):
   discount_amount=abs(float(item.get("invoiceItems").get('unitPrice')))*abs(float(item.get("invoiceItems").get("serviceQuantity")))*item.get('invoiceItems').get('discount').get('percent')/100 
   item_price_extension = abs(float(item.get("invoiceItems").get('unitPrice')))*abs(float(item.get("invoiceItems").get("serviceQuantity")))
-  line_extension_amount= item_price_extension - discount_amount
+  logger.info(f"Item Price Extension: {item_price_extension}")
+  #*item.get('invoiceItems').get('costShare',1).get('percent')/100 - discount_amount
+  line_extension_amount= abs(item_price_extension - discount_amount )*item.get('invoiceItems').get('costShare',1).get('percent')/100 
+  logger.info(f"Line Extension Amount: {line_extension_amount}")
+  item['line_extension_amount'] = line_extension_amount
   # total_line_amount += line_extension_amount - discount_amount
   return {
       "Id": item.get("sInvItemId"),
@@ -454,7 +486,7 @@ def process_line_item(item,data):
       },
       "LineExtensionAmount": {
         "CurrencyID": data.get("invoiceCurrency"),#if not None else "MYR",
-        "Value": to_2_decimal(line_extension_amount)
+        "Value": to_2_decimal(line_extension_amount)#/data.get("costShare")
       },
       "TaxTotal": {
         "TaxAmount": {
