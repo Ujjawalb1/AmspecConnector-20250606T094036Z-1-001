@@ -63,12 +63,15 @@ def invoice_header(data):
   
   items = data.get('items', [])
   # total_line_extension_amount = calculate_total_item_price_extension(items)
-  total_line_extension_amount = sum(item.get("line_extension_amount", 0) for item in items)
+  total_line_extension_amount = sum(to_2_decimal(item.get("line_extension_amount", 0)) for item in items)
   logger.info(f"Total Line Extension Amount: {total_line_extension_amount}")
   #       # abs(float(item.get("invoiceItems", {}).get('unitPrice', 0))) * abs(float(item.get("invoiceItems", {}).get("serviceQuantity", 0)))#/float(item.get("invoiceItems", {}).get("costShare", 1)))
   #       # (abs(float(item.get("invoiceItems").get("preTaxAmount"))))
   #       for item in items
   #   )
+  email_value = data.get("E_invoicing_Notification_Email_Address") or ""
+  normalized_email = email_value.strip().lower()
+
   cleartax_payload = {
   "InvoiceTypeCode": {
     "Value": doc_typ_code
@@ -80,8 +83,8 @@ def invoice_header(data):
   "AccountingCustomerParty": {
     "Party": {
       "Contact": {
-        "ElectronicMail":  None if data.get("E_invoicing_Notification_Email_Address").strip().lower() in ["n/a", "na"] else data.get("E_invoicing_Notification_Email_Address"),
-        "Telephone":cleaned_number
+        "ElectronicMail": None if normalized_email in ["n/a", "na", ""] else email_value,
+        "Telephone": cleaned_number
       },
       "PartyIdentification": [
         {
@@ -250,9 +253,9 @@ def invoice_header(data):
   # "PaymentTerms": {
   #   "Note": ""
   # },
-  # "TaxExchangeRate": {
-  #   "CalculationRate": homeExchangeRate
-  # },
+  "TaxExchangeRate": {
+    "CalculationRate": homeExchangeRate
+  },
 }
   #changes start here
 
@@ -350,7 +353,7 @@ def process():
         # if invoice_date.day == 25 and invoice_date.month == 6 and data.get("invoiceNumber"):
         #     # logger.info(f"Processing invoice: {data.get('invoiceNumber')}, Registration Name: {registration_name}, Date: {invoice_date}")
         #     ws.append([data.get('invoiceNumber'), registration_name, invoice_date.strftime("%Y-%m-%d")])
-        if (invoice_date.year == now.year and (invoice_date.month == now.month or invoice_date.month == now.month-1)) and data.get("invoiceNumber")=="518-014064": #Checking for this month and previous month
+        if (invoice_date.year == now.year and (invoice_date.month == now.month or invoice_date.month == now.month-1)) and data.get("invoiceNumber"):#=="516-015608": #Checking for this month and previous month
          ## ends
           logger.info(data)
           # break
@@ -425,11 +428,11 @@ def process():
 #     return total_price_extension
 
 def process_line_item(item,data):
-  discount_amount=abs(float(item.get("invoiceItems").get('unitPrice')))*abs(float(item.get("invoiceItems").get("serviceQuantity")))*item.get('invoiceItems').get('discount').get('percent')/100 
-  item_price_extension = abs(float(item.get("invoiceItems").get('unitPrice')))*abs(float(item.get("invoiceItems").get("serviceQuantity")))
+  discount_amount=to_2_decimal(float(item.get("invoiceItems").get('unitPrice')))*to_2_decimal(float(item.get("invoiceItems").get("serviceQuantity")))*item.get('invoiceItems').get('discount').get('percent')/100 
+  item_price_extension = to_2_decimal(float(item.get("invoiceItems").get('unitPrice')))*to_2_decimal(float(item.get("invoiceItems").get("serviceQuantity")))
   logger.info(f"Item Price Extension: {item_price_extension}")
   #*item.get('invoiceItems').get('costShare',1).get('percent')/100 - discount_amount
-  line_extension_amount= abs(item_price_extension - discount_amount )*item.get('invoiceItems').get('costShare',1).get('percent')/100 
+  line_extension_amount= to_2_decimal(item_price_extension - discount_amount )*item.get('invoiceItems').get('costShare',1).get('percent')/100 
   logger.info(f"Line Extension Amount: {line_extension_amount}")
   item['line_extension_amount'] = line_extension_amount
   # total_line_amount += line_extension_amount - discount_amount
