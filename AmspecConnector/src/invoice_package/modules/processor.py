@@ -6,6 +6,7 @@ from modules.post_2_amspec import post_invoices
 from logger import logger
 import re
 from modules.utils import get_state_codes
+from modules.utils import get_unit_of_measure_code
 # from exceptions import InvoiceExceptions
 from modules.base64 import json2base64
 from modules.final_payload import cleartax
@@ -21,6 +22,10 @@ def to_2_decimal(value):
         return float(round(float(value), 2))
     except (TypeError, ValueError):
         return 0.0 
+def to_3_decimal(value):
+  if value is None:
+    return None
+  return f"{float(value):.3f}"
 load_dotenv()
 # payload_count = 0
 Send_To_Cleartax = True # set it false to check the payloads without sending to cleartax.
@@ -60,8 +65,8 @@ def invoice_header(data):
       sst_type = "SST"
   normalized_brn = "NA" if str(brn_reg_num).strip().lower() in ["n/a", "na",None] else brn_reg_num
   state = get_state_codes(data.get("billTo.address.state","State_Province")) if data.get("billTo.address.state","State_Province") else get_state_codes("not applicable")
-  
   items = data.get('items', [])
+
   # total_line_extension_amount = calculate_total_item_price_extension(items)
   total_line_extension_amount = sum(to_2_decimal(item.get("line_extension_amount", 0)) for item in items)
   logger.info(f"Total Line Extension Amount: {total_line_extension_amount}")
@@ -230,6 +235,12 @@ def invoice_header(data):
         "CurrencyID": data.get("invoiceCurrency") if not None else "MYR",
         "Value": to_2_decimal(data.get("preTaxAmount"))
     },
+    "Split": {
+        "CostShare":{
+            "Value": to_2_decimal(total_line_extension_amount)
+        }
+    },
+
     "LineExtensionAmount": {
                 "CurrencyID": data.get("invoiceCurrency"),#if not None else "MYR",
                 "Value": to_2_decimal(total_line_extension_amount)
@@ -252,6 +263,9 @@ def invoice_header(data):
   # },
   # "PaymentTerms": {
   #   "Note": ""
+  # },
+  # "TaxExchangeRate": {
+  #   "CalculationRate": 0 if (data.get("invoiceCurrency") and data.get("invoiceCurrency").upper() == "MYR") else homeExchangeRate,
   # },
   "TaxExchangeRate": {
     "CalculationRate": homeExchangeRate
@@ -353,7 +367,9 @@ def process():
         # if invoice_date.day == 25 and invoice_date.month == 6 and data.get("invoiceNumber"):
         #     # logger.info(f"Processing invoice: {data.get('invoiceNumber')}, Registration Name: {registration_name}, Date: {invoice_date}")
         #     ws.append([data.get('invoiceNumber'), registration_name, invoice_date.strftime("%Y-%m-%d")])
-        if (invoice_date.year == now.year and (invoice_date.month == now.month or invoice_date.month == now.month-1)) and data.get("invoiceNumber"):#=="516-015608": #Checking for this month and previous month
+        # allowed_invoices = ["518-014780"]#"516-015685","516-015684","516-015683","518-014735","518-014734","516-015682","518-014733","516-015681","516-015680","516-015679","516-015678","518-014732","518-014731","518-014730","518-014729","518-014728","518-014727","518-014726","518-014725","518-014724","518-014723"]
+
+        if (invoice_date.year == now.year and (invoice_date.month == now.month or invoice_date.month == now.month-1)) and data.get("invoiceNumber") :#in allowed_invoices: #Checking for this month and previous month
          ## ends
           logger.info(data)
           # break
@@ -363,8 +379,8 @@ def process():
             items = data.get('items')
             processed_items = []
             if items is not None:
-                for item in items:
-                    processed_item = process_line_item(item, data)
+                for idx, item in enumerate(items,start =1):
+                    processed_item = process_line_item(item, data,idx)
                     processed_items.append(processed_item)
             data['items'] = items  
             
@@ -427,23 +443,35 @@ def process():
 #         total_price_extension += line_extension_amount
 #     return total_price_extension
 
-def process_line_item(item,data):
+def process_line_item(item,data,line_number):
   discount_amount=to_2_decimal(float(item.get("invoiceItems").get('unitPrice')))*to_2_decimal(float(item.get("invoiceItems").get("serviceQuantity")))*item.get('invoiceItems').get('discount').get('percent')/100 
-  item_price_extension = to_2_decimal(float(item.get("invoiceItems").get('unitPrice')))*to_2_decimal(float(item.get("invoiceItems").get("serviceQuantity")))
+  item_price_extension = to_2_decimal((float(item.get("invoiceItems").get('unitPrice')))*(float(item.get("invoiceItems").get("serviceQuantity"))))
   logger.info(f"Item Price Extension: {item_price_extension}")
   #*item.get('invoiceItems').get('costShare',1).get('percent')/100 - discount_amount
   line_extension_amount= to_2_decimal(item_price_extension - discount_amount )*item.get('invoiceItems').get('costShare',1).get('percent')/100 
   logger.info(f"Line Extension Amount: {line_extension_amount}")
   item['line_extension_amount'] = line_extension_amount
+  code= get_unit_of_measure_code(item.get("invoiceItems").get("serviceQuantityUOM"))
+
   # total_line_amount += line_extension_amount - discount_amount
   return {
-      "Id": item.get("sInvItemId"),
+      "Id": line_number,
       "InvoicedQuantity": {
         "Quantity": abs(float(item.get("invoiceItems").get("serviceQuantity"))),
 
-        "UnitCode": "H87"
+        "UnitCode": code#"H87"#item.get("invoiceItems").get("serviceQuantityUOM")
       },
       "Item": {
+          "AdditionalItemProperty": [
+                    {
+                        "Name": "Subtotal",
+                        "Value": line_extension_amount+to_2_decimal(round(abs(item.get('invoiceItems').get('tax').get('amount')),2))
+                    },
+                    {
+                        "Name": "splitUnitPrice",
+                        "Value": to_3_decimal((item.get("invoiceItems").get("unitPrice"))*item.get('invoiceItems').get('costShare',1).get('percent')/100)
+                    },
+                    ],
         "CommodityClassification": [
           {
             "ItemClassificationCode": {
@@ -452,6 +480,7 @@ def process_line_item(item,data):
 
             }
           }
+
         ],
         "ProductTariffCode": {
           "ItemClassificationCode": {
@@ -467,8 +496,10 @@ def process_line_item(item,data):
         }
       },
       "ItemPriceExtension": {
-        "CurrencyID": data.get("invoiceCurrency"),#if not None else "MYR",
-        "Value": to_2_decimal(item_price_extension)
+        "Amount": {
+          "CurrencyID": data.get("invoiceCurrency"),#if not None else "MYR",
+          "Value": to_2_decimal(item_price_extension)
+        }
       },
       "AllowanceCharge": [
         {
@@ -487,6 +518,13 @@ def process_line_item(item,data):
           "Value": abs(item.get("invoiceItems").get("unitPrice"))
         }
       },
+      "Split": {
+          "CostShare":{
+              "Percent" : item.get("invoiceItems").get('costShare',1).get("percent"),
+              "Value": abs(float(item.get("invoiceItems").get('unitPrice')))*abs(float(item.get("invoiceItems").get("serviceQuantity")))*item.get('invoiceItems').get('costShare',1).get("percent")/100  #to be calculated
+          }
+      },
+      
       "LineExtensionAmount": {
         "CurrencyID": data.get("invoiceCurrency"),#if not None else "MYR",
         "Value": to_2_decimal(line_extension_amount)#/data.get("costShare")

@@ -68,7 +68,7 @@ venv.bak/
 
 # macOS
 .DS_Store
-
+*.logs
 # Log files
 *.log
 
