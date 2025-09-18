@@ -32,7 +32,7 @@ Send_To_Cleartax = True # set it false to check the payloads without sending to 
 
 def invoice_header(data):
   if data.get("homeExchangeRate") is None:
-    homeExchangeRate = 1
+    homeExchangeRate = 0
   else:
     homeExchangeRate = float(data.get('homeExchangeRate'))
   if data.get("Buyer_Registration_Number") is None or data.get("Buyer_Registration_Number") == data.get("VAT_Registration_No_SST_Number") :
@@ -444,7 +444,7 @@ def process():
 #     return total_price_extension
 
 def process_line_item(item,data,line_number):
-  discount_amount=to_2_decimal(float(item.get("invoiceItems").get('unitPrice')))*to_2_decimal(float(item.get("invoiceItems").get("serviceQuantity")))*item.get('invoiceItems').get('discount').get('percent')/100 
+  discount_amount=to_3_decimal(item.get("invoiceItems").get('unitPrice'))*to_3_decimal(item.get("invoiceItems").get("serviceQuantity"))*item.get('invoiceItems').get('discount').get('percent')/100*(item.get('invoiceItems').get('costShare',1).get('percent',100)/100)
   item_price_extension = to_2_decimal((float(item.get("invoiceItems").get('unitPrice')))*(float(item.get("invoiceItems").get("serviceQuantity"))))
   logger.info(f"Item Price Extension: {item_price_extension}")
   #*item.get('invoiceItems').get('costShare',1).get('percent')/100 - discount_amount
@@ -457,7 +457,7 @@ def process_line_item(item,data,line_number):
   return {
       "Id": line_number,
       "InvoicedQuantity": {
-        "Quantity": abs(float(item.get("invoiceItems").get("serviceQuantity"))),
+        "Quantity": to_3_decimal((item.get("invoiceItems").get("serviceQuantity"))),
 
         "UnitCode": code#"H87"#item.get("invoiceItems").get("serviceQuantityUOM")
       },
@@ -508,7 +508,7 @@ def process_line_item(item,data,line_number):
           "AllowanceChargeReason": "NA",
           "Amount": {
             "CurrencyID": data.get("invoiceCurrency"),
-            "Value": abs(float(item.get("invoiceItems").get('unitPrice')))*abs(float(item.get("invoiceItems").get("serviceQuantity")))*item.get('invoiceItems').get('discount').get('percent')/100  #to be calculated
+            "Value": to_3_decimal((item.get("invoiceItems").get('unitPrice')))*to_3_decimal((item.get("invoiceItems").get("serviceQuantity")))*item.get('invoiceItems').get('discount').get('percent')/100*item.get('invoiceItems').get('costShare',1).get('percent')/100  #to be calculated
           }
         },
       ],
