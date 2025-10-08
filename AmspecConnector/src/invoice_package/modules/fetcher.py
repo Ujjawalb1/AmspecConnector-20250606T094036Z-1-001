@@ -36,26 +36,24 @@ def fetch_invoices():
         if(response.status_code==200):
             # Decode and process
             try:
-                response_text = response_data.decode('utf-8')
-                # logger.info("Decoded Length (characters):", len(response_text))
-                # Optionally parse as JSON if the response is JSON
-                invoice = json.loads(response_text)
-                # logger.info(json.dumps(invoice, indent=2))
-            except UnicodeDecodeError:
-                logger.info("Failed to decode as UTF-8. Raw size:", len(response_data))
+                response_text = response_data.decode("utf-8")
+                invoices = json.loads(response_text)
+            except (UnicodeDecodeError, json.JSONDecodeError) as e:
+                logger.error(f"Failed to decode/parse fetch response: {e}")
+                raise InvoiceExceptions(f"Invalid response from API: {e}")
 
             response.close()
-            if not invoice:
+            if not invoices:
                 raise InvoiceExceptions("No invoices found in API response.")
-                logger.info(f"Successfully fetched {len(invoices)} invoices.")
-                
-            return invoice
+            
+            logger.info(f"Successfully fetched {len(invoices)} invoices.")
+            return invoices
         else:
             raise InvoiceExceptions(f"Invoice API returned {response.status_code}: {response.text}")
+
     except requests.exceptions.Timeout:
         logger.error("Invoice API request timed out.")
         raise InvoiceExceptions("Invoice API request timed out.")
     except requests.exceptions.RequestException as e:
         logger.error(f"Invoice API request failed: {e}")
         raise InvoiceExceptions(f"Invoice API request failed: {e}")
-        

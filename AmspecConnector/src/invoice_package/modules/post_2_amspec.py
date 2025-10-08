@@ -43,17 +43,17 @@ def post_invoices(invoice_id,lhdn_doc_id,lhdn_status,lhdn_error_dtls,lhdn_qr_cod
                 response_text = response_data.decode('utf-8')
                 # logger.info("Decoded Length (characters):", len(response_text))
                 # Optionally parse as JSON if the response is JSON
-                invoice = json.loads(response_text)
-                logger.info(json.dumps(invoice, indent=2))
-            except UnicodeDecodeError:
-                logger.info("Failed to decode as UTF-8. Raw size:", len(response_data))
+                invoice_response = json.loads(response_text)
+                logger.info(f"POST API Response:\n{json.dumps(invoice_response, indent=2)}")
+            except (UnicodeDecodeError, json.JSONDecodeError) as e:
+                logger.error(f"Failed to decode/parse POST response: {e}")
+                raise InvoiceExceptions(f"Invalid response from POST API: {e}")
+
 
             response.close()
-            if not invoice:
-                raise InvoiceExceptions("No invoices found in API response.")
-                logger.info(f"Successfully fetched {len(invoices)} invoices.")
-                
-            return invoice
+            if not invoice_response:
+                raise InvoiceExceptions("No invoices found in API response.")                
+            return invoice_response
         else:
             raise InvoiceExceptions(f"Invoice API returned {response.status_code}: {response.text}")
     except requests.exceptions.Timeout:

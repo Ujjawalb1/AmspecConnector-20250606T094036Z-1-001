@@ -1,4 +1,4 @@
-#current code in processor.py
+# code in server
 import csv
 import openpyxl
 from modules.fetcher import fetch_invoices
@@ -19,13 +19,14 @@ from modules.invoice_status import einvoice_status
 from modules.header_subtotal import header_subtotal
 def to_2_decimal(value):
     try:
-        return float(round(float(value), 2))
+        return f"{float(value):.2f}"
     except (TypeError, ValueError):
-        return 0.0 
+      return None
+
 def to_3_decimal(value):
   if value is None:
     return None
-  return f"{float(value):.3f}"
+  return f"{float(value):.3f}" 
 load_dotenv()
 # payload_count = 0
 Send_To_Cleartax = True # set it false to check the payloads without sending to cleartax.
@@ -68,7 +69,7 @@ def invoice_header(data):
   items = data.get('items', [])
 
   # total_line_extension_amount = calculate_total_item_price_extension(items)
-  total_line_extension_amount = sum(to_2_decimal(item.get("line_extension_amount", 0)) for item in items)
+  total_line_extension_amount = sum(float(round(float(item.get("line_extension_amount", 0)), 2)) for item in items)
   logger.info(f"Total Line Extension Amount: {total_line_extension_amount}")
   #       # abs(float(item.get("invoiceItems", {}).get('unitPrice', 0))) * abs(float(item.get("invoiceItems", {}).get("serviceQuantity", 0)))#/float(item.get("invoiceItems", {}).get("costShare", 1)))
   #       # (abs(float(item.get("invoiceItems").get("preTaxAmount"))))
@@ -264,9 +265,6 @@ def invoice_header(data):
   # "PaymentTerms": {
   #   "Note": ""
   # },
-  # "TaxExchangeRate": {
-  #   "CalculationRate": 0 if (data.get("invoiceCurrency") and data.get("invoiceCurrency").upper() == "MYR") else homeExchangeRate,
-  # },
   "TaxExchangeRate": {
     "CalculationRate": homeExchangeRate
   },
@@ -332,7 +330,7 @@ def invoice_header(data):
 
  #changes end here 
  #commented out
-  logger.info(f"cleartax_payload_XXXXXXXXXXXX: {cleartax_payload}") 
+  # logger.info(f"cleartax_payload_XXXXXXXXXXXX: {cleartax_payload}") 
   return cleartax_payload
 
     
@@ -343,88 +341,79 @@ def process():
     # logger.info(type(now.month))
     payload_count = 0
     logger.info(f"Total invoices: {len(datas)}")
-    # wb = openpyxl.Workbook()
-    # ws = wb.active
-    # ws.title = "Invoices"
-    # ws.append(["Invoice Number", "Registration Name", "Date"])
-    for data in datas:
-        #Debugging logic starts
-        # logger.info(f"Processing invoice: {data.get('invoiceNumber')}")
-        # invoice_date = datetime.strptime(data.get('invoiceDate'), "%Y-%m-%d %H:%M:%S")
-        # if not (invoice_date.year == now.year and (invoice_date.month == now.month or invoice_date.month == now.month-1)):
-        #     logger.info("Skipped due to date filter")
-        #     continue
-        # if not data.get("invoiceNumber"):
-        #     logger.info("Skipped due to missing invoice number")
-        #     continue
-        # if data.get("LHDN_Status") == 'VALID' and data.get("LHDN_QrCode") is not None:
-        #     logger.info("Skipped due to LHDN status/QR code")
-        #     continue
-        # #Debugging logic ends
-        invoice_date = datetime.strptime(data.get('invoiceDate'), "%Y-%m-%d %H:%M:%S")
-       # for particular date and invoice number starts
-        # registration_name = data.get("billTo.partyName")
-        # if invoice_date.day == 25 and invoice_date.month == 6 and data.get("invoiceNumber"):
-        #     # logger.info(f"Processing invoice: {data.get('invoiceNumber')}, Registration Name: {registration_name}, Date: {invoice_date}")
-        #     ws.append([data.get('invoiceNumber'), registration_name, invoice_date.strftime("%Y-%m-%d")])
-        # allowed_invoices = ["518-014780"]#"516-015685","516-015684","516-015683","518-014735","518-014734","516-015682","518-014733","516-015681","516-015680","516-015679","516-015678","518-014732","518-014731","518-014730","518-014729","518-014728","518-014727","518-014726","518-014725","518-014724","518-014723"]
 
-        if (invoice_date.year == now.year and (invoice_date.month == now.month or invoice_date.month == now.month-1)) and data.get("invoiceNumber") :#in allowed_invoices: #Checking for this month and previous month
-         ## ends
-          logger.info(data)
-          # break
-          if data.get("LHDN_Status") != 'VALID' or data.get("LHDN_QrCode") is None:
-            # invoice_headers = invoice_header(data)
-            # invoice_id = data.get("invoiceId")
-            items = data.get('items')
-            processed_items = []
-            if items is not None:
-                for idx, item in enumerate(items,start =1):
-                    processed_item = process_line_item(item, data,idx)
-                    processed_items.append(processed_item)
-            data['items'] = items  
-            
-            
-            invoice_headers = invoice_header(data)  # Now invoice_header will see line_extension_amounts
-            invoice_id = data.get("invoiceId")
-            invoice_headers["InvoiceLine"] = processed_items# commented out
-            
-            logger.info(invoice_headers)
-            # break
-            base64 = json2base64(invoice_headers)
-            #commented out
-            logger.info(base64)
-            cleartax_final_payload = cleartax(base64)
-            #commented out
-            logger.info(cleartax_final_payload)
-            payload_count += 1
-            # logger.info(f"Payloads sent so far: {payload_count, data.get('invoiceNumber')}")
-            if Send_To_Cleartax and payload_count:
-                try:
-                    document_id_response = post_2_cleartax(cleartax_final_payload)
-                    logger.info(document_id_response)
-                except Exception as e:
-                    logger.error(f"Error sending payload to ClearTax: {e}")
-                    continue
-            else:
-                # logger.info("Skipping sending to ClearTax as Send_To_Cleartax is False or payload_count is 0")
-                document_id_response = None
-            logger.info(document_id_response)
-            if document_id_response != None and  document_id_response.get("DocumentResponses") != None and len(document_id_response.get("DocumentResponses"))>0:
-              if document_id_response.get("ErrorDetails") !=None:
-                error_dtls = str(document_id_response.get("ErrorDetails"))
-              else:
-                  error_dtls = "None"
-              document_id = document_id_response.get("DocumentResponses")[0].get("DocumentId")
-              einvoice_stat = einvoice_status(document_id)
-              qr_code = einvoice_stat.get("QrCode") if einvoice_stat.get("QrCode") != None else "None"
-              govt_qr_code_url = einvoice_stat.get("GovtQrCodeUrl") if einvoice_stat.get("GovtQrCodeUrl") != None else "None"
-              lhdn_status = str(einvoice_stat.get("Status"))
-              post_invoice = post_invoices(invoice_id,document_id,lhdn_status,error_dtls,qr_code,govt_qr_code_url)
-            # logger.info(post_invoice)
-            # break
-          else:
-              continue
+    for data in datas:
+        try:
+            invoice_date = datetime.strptime(data.get('invoiceDate'), "%Y-%m-%d %H:%M:%S")
+            if (
+                invoice_date.year == now.year and
+                (invoice_date.month == now.month or invoice_date.month == now.month-1)
+            ):  # Checking for this month and previous month
+                # allowed_invoices = ["CM-518-000845"]
+                if data.get("invoiceNumber") :#in allowed_invoices:
+                    logger.info(data)
+                    ## ends
+                    # break
+                    if data.get("LHDN_Status") != 'VALID' or data.get("LHDN_QrCode") is None:
+                        # invoice_headers = invoice_header(data)
+                        # invoice_id = data.get("invoiceId")
+                        items = data.get('items')
+                        processed_items = []
+                        if items is not None:
+                            for idx, item in enumerate(items, start=1):
+                                processed_item = process_line_item(item, data, idx)
+                                processed_items.append(processed_item)
+                        data['items'] = items
+
+                        invoice_headers = invoice_header(data)  # Now invoice_header will see line_extension_amounts
+                        invoice_id = data.get("invoiceId")
+                        invoice_headers["InvoiceLine"] = processed_items  # commented out
+
+                        logger.info('Invoice Headers: {}'.format(invoice_headers))
+                        # break
+                        base64 = json2base64(invoice_headers)
+                        # commented out
+                        # logger.info('Base64 Encoded Invoice Headers: {}'.format(base64))
+                        cleartax_final_payload = cleartax(base64)
+                        # commented out
+                        # logger.info('ClearTax Final Payload: {}'.format(cleartax_final_payload))
+                        payload_count += 1
+                        # logger.info(f"Payloads sent so far: {payload_count, data.get('invoiceNumber')}")
+                        if Send_To_Cleartax:
+                            try:
+                                document_id_response = post_2_cleartax(cleartax_final_payload)
+                                # logger.info(document_id_response)
+                            except Exception as e:
+                                logger.error(f"Error sending payload to ClearTax: {e}")
+                                continue
+                        else:
+                            # logger.info("Skipping sending to ClearTax as Send_To_Cleartax is False or payload_count is 0")
+                            document_id_response = None
+                        logger.info('Document ID Response: {}'.format(document_id_response))
+                        if (document_id_response != None and
+                                document_id_response.get("DocumentResponses") != None and
+                                len(document_id_response.get("DocumentResponses")) > 0):
+                            if document_id_response.get("ErrorDetails") != None:
+                                error_dtls = str(document_id_response.get("ErrorDetails"))
+                            else:
+                                error_dtls = "None"
+                            document_id = document_id_response.get("DocumentResponses")[0].get("DocumentId")
+                            einvoice_stat = einvoice_status(document_id)
+                            qr_code = einvoice_stat.get("QrCode") if einvoice_stat.get("QrCode") != None else "None"
+                            govt_qr_code_url = einvoice_stat.get("GovtQrCodeUrl") if einvoice_stat.get("GovtQrCodeUrl") != None else "None"
+                            lhdn_status = str(einvoice_stat.get("Status"))
+                            post_invoice = post_invoices(
+                                invoice_id, document_id, lhdn_status, error_dtls, qr_code, govt_qr_code_url
+                            )
+                        # logger.info(post_invoice)
+                        # break
+                    else:
+                        continue
+        except Exception as e:
+            logger.exception(f"Error processing invoice {data.get('invoiceNumber')}: {e}")
+            # continue to next invoice
+            continue
+
     # wb.save("invoices_25_june.xlsx")
 
 # def calculate_total_item_price_extension(items):
@@ -444,16 +433,22 @@ def process():
 #     return total_price_extension
 
 def process_line_item(item,data,line_number):
-  discount_amount=to_3_decimal(item.get("invoiceItems").get('unitPrice'))*to_3_decimal(item.get("invoiceItems").get("serviceQuantity"))*item.get('invoiceItems').get('discount').get('percent')/100*(item.get('invoiceItems').get('costShare',1).get('percent',100)/100)
-  item_price_extension = to_2_decimal((float(item.get("invoiceItems").get('unitPrice')))*(float(item.get("invoiceItems").get("serviceQuantity"))))
+  unit_price = float(to_3_decimal(item.get("invoiceItems").get('unitPrice', 0)))
+  quantity = float(to_3_decimal(item.get("invoiceItems").get("serviceQuantity", 0)))
+  cost_share = float(item.get('invoiceItems').get('costShare', 1).get('percent', 1) / 100)
+  discount_percent = float(item.get('invoiceItems').get('discount').get('percent', 0) / 100)
+
+
+  discount_amount=((unit_price*cost_share)*(quantity))*discount_percent
+  item_price_extension = ((unit_price*cost_share)*(quantity))
   logger.info(f"Item Price Extension: {item_price_extension}")
   #*item.get('invoiceItems').get('costShare',1).get('percent')/100 - discount_amount
-  line_extension_amount= to_2_decimal(item_price_extension - discount_amount )*item.get('invoiceItems').get('costShare',1).get('percent')/100 
+  line_extension_amount= ((item_price_extension - discount_amount ))
   logger.info(f"Line Extension Amount: {line_extension_amount}")
   item['line_extension_amount'] = line_extension_amount
   code= get_unit_of_measure_code(item.get("invoiceItems").get("serviceQuantityUOM"))
 
-  # total_line_amount += line_extension_amount - discount_amount
+  # total_line_amount += line_extension`_amount - discount_amount
   return {
       "Id": line_number,
       "InvoicedQuantity": {
@@ -465,11 +460,11 @@ def process_line_item(item,data,line_number):
           "AdditionalItemProperty": [
                     {
                         "Name": "Subtotal",
-                        "Value": line_extension_amount+to_2_decimal(round(abs(item.get('invoiceItems').get('tax').get('amount')),2))
-                    },
+                        "Value": to_2_decimal( line_extension_amount + abs(item.get('invoiceItems').get('tax').get('amount')) )
+                        },
                     {
                         "Name": "splitUnitPrice",
-                        "Value": to_3_decimal((item.get("invoiceItems").get("unitPrice"))*item.get('invoiceItems').get('costShare',1).get('percent')/100)
+                        "Value": to_2_decimal((item.get("invoiceItems").get("unitPrice"))*item.get('invoiceItems').get('costShare',1).get('percent')/100)
                     },
                     ],
         "CommodityClassification": [
@@ -508,7 +503,7 @@ def process_line_item(item,data,line_number):
           "AllowanceChargeReason": "NA",
           "Amount": {
             "CurrencyID": data.get("invoiceCurrency"),
-            "Value": to_3_decimal((item.get("invoiceItems").get('unitPrice')))*to_3_decimal((item.get("invoiceItems").get("serviceQuantity")))*item.get('invoiceItems').get('discount').get('percent')/100*item.get('invoiceItems').get('costShare',1).get('percent')/100  #to be calculated
+            "Value": abs(float(item.get("invoiceItems").get('unitPrice')))*abs(float(item.get("invoiceItems").get("serviceQuantity")))*item.get('invoiceItems').get('discount').get('percent')/100*item.get('invoiceItems').get('costShare',1).get('percent')/100   #to be calculated
           }
         },
       ],
@@ -546,8 +541,8 @@ def process_line_item(item,data,line_number):
             },
             "TaxCategory": {
   
-              "Id": "02" if item.get("invoiceItems").get("tax").get("name") != None else "E",
-              "TaxExemptionReason": "" if item.get("invoiceItems").get('tax').get("name") !=None else "Exempted Service"
+              "Id": "02" if item.get("invoiceItems").get("tax").get("name") != None else "02",
+              "TaxExemptionReason": "Service Tax" if item.get("invoiceItems").get('tax').get("name") !=None else "Service Tax"
             },
             "Percent": 0 if item.get("invoiceItems").get("tax").get("percent") == None else item.get("invoiceItems").get("tax").get("percent")/100
 

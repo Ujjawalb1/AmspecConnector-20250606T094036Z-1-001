@@ -117,6 +117,7 @@ SERVICE_QUANTITY_MAP={
     "WorkingDay": "E49",
 
 }
-
-def get_unit_of_measure_code(uom: str) -> str:
-    return SERVICE_QUANTITY_MAP.get(uom, "H87")
+def get_unit_of_measure_code(uom):
+    if not uom:
+        return "None"  # default code for missing UOM
+    return SERVICE_QUANTITY_MAP.get(uom, SERVICE_QUANTITY_MAP.get(uom.lower(), "H87"))
